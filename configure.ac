@@ -210,6 +210,24 @@ if test "$have_inet_aton" = "yes"; then
    AC_DEFINE(HAVE_INET_ATON, 1, [Have inet_aton()])
 fi
 
+dnl check for DBUS support
+AC_ARG_WITH([dbus],
+        [AC_HELP_STRING([--with-dbus],
+                [compile with D-BUS support @<:@default=check@:>@])],
+        [AS_IF([test "x$withval" = xyes], [with_dbus=check])],
+        [with_dbus=check])
+
+AS_IF([test "x$with_dbus" = xno], [], dnl disabled by user
+      [test "x$with_dbus" = xcheck],  dnl autodetect with pkg-config
+        [PKG_CHECK_MODULES(DBUS, [dbus-1],
+                [with_dbus=yes],
+                [with_dbus=no])
+        ])
+AM_CONDITIONAL(OPENCONNECT_DBUS, [test "x$with_dbus" = xyes])
+AS_IF([test "x$with_dbus" = xyes],
+        [AC_DEFINE(HAVE_DBUS, 1, [Define if D-BUS should be used in OpenConnect.])])
+
+
 AC_MSG_CHECKING([for IPV6_PATHMTU socket option])
 AC_COMPILE_IFELSE([AC_LANG_PROGRAM([
 		  #include <netinet/in.h>

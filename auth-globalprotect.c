@@ -22,6 +22,8 @@
 #include <libxml/parser.h>
 #include <libxml/tree.h>
 
+#include <dbus/dbus.h>
+
 #include "openconnect-internal.h"
 
 struct login_context {
@@ -55,6 +57,11 @@ void gpst_common_headers(struct openconnect_info *vpninfo,
  */
 static int parse_prelogin_xml(struct openconnect_info *vpninfo, xmlNode *xml_node, void *cb_data)
 {
+    DBusError err;
+    DBusConnection* conn;
+    int ret;
+    char * saml_token;
+    
 	struct login_context *ctx = cb_data;
 	struct oc_auth_form *form = ctx->form;
 	struct oc_form_opt *opt, *opt2;
@@ -107,6 +114,86 @@ static int parse_prelogin_xml(struct openconnect_info *vpninfo, xmlNode *xml_nod
 	}
 	if (saml_path && asprintf(&form->banner, _("SAML login is required via %s to this URL:\n\t%s"), saml_method, saml_path) == 0)
 		goto nomem;
+    
+    // initialise the errors
+    dbus_error_init(&err);
+    conn = dbus_bus_get(DBUS_BUS_SYSTEM, &err);
+    if (dbus_error_is_set(&err)) { 
+      fprintf(stderr, "Connection Error (%s)\n", err.message); 
+      dbus_error_free(&err); 
+    }
+    if (NULL == conn) { 
+      exit(1); 
+    }
+   DBusMessage* msg;
+   DBusMessageIter args;
+   DBusPendingCall* pending;
+
+   msg = dbus_message_new_method_call("openconnect.authentication", // target for the method call
+         "/PingAuthenticator", // object to call on
+         "openconnect.Authenticator", // interface to call on
+         "authent"); // method name
+   if (NULL == msg) { 
+      fprintf(stderr, "Message Null\n");
+      exit(1);
+   }
+
+   // append arguments
+   dbus_message_iter_init_append(msg, &args);
+   if (!dbus_message_iter_append_basic(&args, DBUS_TYPE_STRING, &saml_path)) { 
+      fprintf(stderr, "Out Of Memory!\n"); 
+      exit(1);
+   }
+
+   // send message and get a handle for a reply
+   if (!dbus_connection_send_with_reply (conn, msg, &pending, 240000)) { // -1 is default timeout
+      fprintf(stderr, "Out Of Memory!\n"); 
+      exit(1);
+   }
+   if (NULL == pending) { 
+      fprintf(stderr, "Pending Call Null\n"); 
+      exit(1); 
+   }
+   dbus_connection_flush(conn);
+
+   // free message
+   dbus_message_unref(msg);
+
+   dbus_uint32_t level;
+        
+   // block until we receive a reply
+   dbus_pending_call_block(pending);
+   
+   // get the reply message
+   msg = dbus_pending_call_steal_reply(pending);
+   if (NULL == msg) {
+      fprintf(stderr, "Reply Null\n"); 
+      exit(1); 
+   }
+   // free the pending message handle
+   dbus_pending_call_unref(pending);
+
+   // read the parameters
+   if (!dbus_message_iter_init(msg, &args))
+      fprintf(stderr, "Message has no arguments!\n"); 
+   else if (DBUS_TYPE_STRING != dbus_message_iter_get_arg_type(&args)) 
+      fprintf(stderr, "Argument is not boolean!\n"); 
+   else
+      dbus_message_iter_get_basic(&args, &saml_token);
+
+   if (!dbus_message_iter_next(&args))
+      fprintf(stderr, "Message has too few arguments!\n"); 
+   else if (DBUS_TYPE_UINT32 != dbus_message_iter_get_arg_type(&args)) 
+      fprintf(stderr, "Argument is not int!\n"); 
+   else
+      dbus_message_iter_get_basic(&args, &level);
+
+   printf("Got Reply: %s, %d\n", saml_token, level);
+
+   // free reply and close connection
+   dbus_message_unref(msg);   
+    
+    
 	form->message = prompt ? : strdup(_("Please enter your username and password"));
 	prompt = NULL;
 	form->auth_id = strdup("_login");

@@ -33,7 +33,7 @@
 static int proxy_write(struct openconnect_info *vpninfo, char *buf, size_t len);
 static int proxy_read(struct openconnect_info *vpninfo, char *buf, size_t len);
 
-#define MAX_BUF_LEN 131072
+#define MAX_BUF_LEN 231072
 #define BUF_CHUNK_SIZE 4096
 
 struct oc_text_buf *buf_alloc(void)
