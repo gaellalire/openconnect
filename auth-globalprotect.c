@@ -189,6 +189,7 @@ static int parse_prelogin_xml(struct openconnect_info *vpninfo, xmlNode *xml_nod
       dbus_message_iter_get_basic(&args, &level);
 
    printf("Got Reply: %s, %d\n", saml_token, level);
+   char * tokenValue = strdup(saml_token);
 
    // free reply and close connection
    dbus_message_unref(msg);   
@@ -220,7 +221,7 @@ static int parse_prelogin_xml(struct openconnect_info *vpninfo, xmlNode *xml_nod
 	opt2->name = strdup(ctx->alt_secret ? : "passwd");
 	if (asprintf(&opt2->label, "%s: ", ctx->alt_secret ? : password_label ? : _("Password")) == 0)
 		goto nomem;
-
+    
 	/* XX: Some VPNs use a password in the first form, followed by a
 	 * a token in the second ("challenge") form. Others use only a
 	 * token. How can we distinguish these? */
@@ -228,6 +229,9 @@ static int parse_prelogin_xml(struct openconnect_info *vpninfo, xmlNode *xml_nod
 		opt2->type = OC_FORM_OPT_TOKEN;
 	else
 		opt2->type = OC_FORM_OPT_PASSWORD;
+
+    opt2->_value = tokenValue;
+    opt2->type = OC_FORM_OPT_HIDDEN;
 
 	vpn_progress(vpninfo, PRG_TRACE, "%s%s: \"%s\" %s(%s)=%s, \"%s\" %s(%s)\n",
 				 form->auth_id[0] == '_' ? "Login form" : "Challenge form ",
